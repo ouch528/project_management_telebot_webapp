@@ -7,13 +7,16 @@ import asyncio
 import firebase_admin
 from firebase_admin import credentials, firestore
 from pathlib import Path
+import hashlib
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(dotenv_path=BASE_DIR / '.env')
+load_dotenv()
 
-cred = credentials.Certificate(BASE_DIR / os.getenv("FIREBASE_KEY_PATH"))
+cred = credentials.Certificate("firebase_key.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+
+def hash_chat_title(title: str) -> str:
+    return hashlib.sha256(title.encode('utf-8')).hexdigest()
 
 async def set_commands(application):
     commands = [
@@ -25,6 +28,7 @@ async def naming(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args  # List of words after the command
     user_id = update.effective_user.id
     chat_title = update.effective_chat.title
+    hashed_chat_title = hash_chat_title(chat_title)
     if not args:
         await update.message.reply_text("Please provide a name after the command. E.g., /naming Project Phoenix")
     else:
@@ -32,12 +36,23 @@ async def naming(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.collection(chat_title).document("member_names").set({
             str(user_id): name
         })
-        print(f"Added name {name} in document member_names in collection {chat_title}")
+        print(f"Added name '{name}' in document 'member_names' in collection '{chat_title}'")
 
         db.collection(chat_title).document("member_user_id").set({
             name: str(user_id)
         })
-        print(f"Added user id {user_id} in document member_user_id in collection {chat_title}")
+        print(f"Added user id '{user_id}' in document 'member_user_id' in collection '{chat_title}'")
+
+        doc_ref = db.collection(chat_title).document("hashed_chat_title")
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            doc_ref.set({
+                chat_title: hashed_chat_title
+            })
+            print(f"Added hashed chat title '{hashed_chat_title}' in document 'hashed_chat_title' in collection '{chat_title}'")
+        else:
+            print(f"'hashed_chat' document already exists in collection '{chat_title}'")
 
         await update.message.reply_text(f"You entered: {name}")
 
